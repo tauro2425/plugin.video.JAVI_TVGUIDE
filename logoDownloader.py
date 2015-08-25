@@ -41,10 +41,10 @@ def delete_file(filename):
 if __name__ == '__main__':
     if deleteDB():
         d = xbmcgui.Dialog()
-        d.ok('PLD TV Guide', '                        Extras eliminado correctamente')
+        d.ok('JAVI TVGUIDE', '                        Extras eliminado correctamente')
     else:
         d = xbmcgui.Dialog()
-        d.ok('PLD TV Guide', '                             DESEA DESCARGAR LOS LOGOS  ')
+        d.ok('JAVI TVGUIDE', '                             DESEA DESCARGAR LOS LOGOS  ')
 
 ADDON  = xbmcaddon.Addon(id = 'script.tvguidemicro')
 datapath = xbmc.translatePath(ADDON.getAddonInfo('profile'))

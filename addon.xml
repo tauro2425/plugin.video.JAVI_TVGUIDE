@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="script.tvguidemicro" name="[COLOR blue]PLD TV-GUIA[/COLOR]" version="2.0.6" provider-name="[COLOR blue]ProyectoLuzDigital[/COLOR]">
+<addon id="script.tvguidemicro" name="[COLOR lime]JAVI TVGUIDE[/COLOR]" version="1.0.0" provider-name="[COLOR lime]JAVI TVGUIDE[/COLOR]">
     <requires>
-        <import addon="xbmc.python" version="2.1.0"/>
+        <import addon="xbmc.python" version="1.0.0"/>
         <import addon="script.module.simplejson" version="2.0.10"/>
         <import addon="script.module.elementtree" version="1.2.7"/>
         <import addon="script.module.buggalo" version="1.1.2"/>
@@ -11,7 +11,7 @@
     <extension point="xbmc.service" library="service.py" start="login" />
     <extension point="xbmc.addon.metadata">
         <summary lang="es">TV Guide con XMLTV y soporte para streaming</summary>
-		<description lang="es">TV Guide ofrece una visión general de lo que hay en la televisión ahora mismo, así no tienes que cambiar el canal en XBMC![CR]Los datos EPG pueden ser obtenidos de YouSee.tv, DR.dk, TvTid.dk, archivo XMLTV o de una fuente remota de JSON.[CR][CR]Navegue usando las teclas de flecha y cambie de página mediante canal + / -.[CR][CR]Si usted tiene comentarios o sugerencias para este complemente, no dude en participar en el foro http://proyectoluzdigital.com/[CR]Plugin Modificado Por ELCHISPAARTISTA, con la Colaboracion de Rpblazquez,Jose35,Axaima,LopezCid,Taberita,H</description>
+		<description lang="es">JAVI TVGUIDE es una guia de tv en version beta para el disfrute de toda la familia</description>
         <platform>all</platform>
         <language></language>
         <license>GPLv2</license>
