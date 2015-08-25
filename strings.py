@@ -19,7 +19,7 @@
 #
 import xbmcaddon
 
-ADDON = xbmcaddon.Addon(id = 'script.tvguidemicro')
+ADDON = xbmcaddon.Addon(id = 'script.tvguidedixie')
 
 NO_DESCRIPTION = 30000
 CALCULATING_REMAINING_TIME = 30002
@@ -39,6 +39,7 @@ DONE = 30105
 LOAD_ERROR_TITLE = 30150
 LOAD_ERROR_LINE1 = 30151
 LOAD_ERROR_LINE2 = 30152
+LOAD_ERROR_LINE3 = 30160
 CONFIGURATION_ERROR_LINE2 = 30153
 
 SKIN_ERROR_LINE1 = 30154

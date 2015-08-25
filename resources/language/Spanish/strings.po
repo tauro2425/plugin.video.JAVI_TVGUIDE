@@ -25,7 +25,7 @@ msgid "[B]Loading data from external source...[/B]"
 msgstr "[B]Carga de datos de origen externo...[/B]"
 
 msgctxt "#30002"
-msgid "Calculando tiempo restante..."
+msgid "Calculating remaning time..."
 msgstr "Calculando tiempo restante..."
 
 msgctxt "#30003"

@@ -21,11 +21,11 @@ msgid "No description"
 msgstr ""
 
 msgctxt "#30001"
-msgid "[B]Updating your EPG. Please wait.[/B]"
+msgid "[B]Loading EPG.[/B]"
 msgstr ""
 
 msgctxt "#30002"
-msgid "Calculando Tiempo Restante espere..."
+msgid "Please wait..."
 msgstr ""
 
 msgctxt "#30003"
@@ -33,7 +33,7 @@ msgid "Approximately %d seconds left..."
 msgstr ""
 
 msgctxt "#30004"
-msgid "Loading of data already in progress..."
+msgid "Loading in progress..."
 msgstr ""
 
 msgctxt "#30005"
@@ -53,7 +53,7 @@ msgid "Cancel"
 msgstr ""
 
 msgctxt "#30009"
-msgid "No program available"
+msgid "No listings available but streams will still play."
 msgstr ""
 
 #empty strings from id 30010 to 30099
@@ -63,7 +63,7 @@ msgid "General"
 msgstr ""
 
 msgctxt "#30101"
-msgid "Source"
+msgid "Main Settings"
 msgstr ""
 
 msgctxt "#30102"
@@ -115,7 +115,7 @@ msgid "Play channels using the Danish Live TV addon"
 msgstr ""
 
 msgctxt "#30114"
-msgid "Startup"
+msgid "Extra Features"
 msgstr ""
 
 msgctxt "#30115"
@@ -127,7 +127,7 @@ msgid "Search for channel logos in"
 msgstr ""
 
 msgctxt "#30117"
-msgid "Selecione Canales"
+msgid "Dixie URL"
 msgstr ""
 
 msgctxt "#30118"
@@ -147,37 +147,61 @@ msgid "Alternative streaming is not compatible with OSD menu"
 msgstr ""
 
 msgctxt "#30122"
-msgid "Touch Screen"
+msgid "Back Up"
 msgstr ""
 
 msgctxt "#30123"
-msgid "Activar el modo de pantalla táctil"
+msgid "Enable Touch Screen"
 msgstr ""
 
 msgctxt "#30124"
-msgid "Horario Mundial."
+msgid "Timezone - Include DST if required."
 msgstr ""
 
 msgctxt "#30125"
-msgid "Reset EPG"
+msgid "Maintenance"
 msgstr ""
 
 msgctxt "#30126"
-msgid "Haz click aquí para restablecer el EPG,Se perderán todos los ajustes personalizados"
+msgid "Click to - Reset Programme Listings."
 msgstr ""
 
-#empty strings from id 30127 to 30149
+msgctxt "#30127"
+msgid "Click to - Reset your channels. Some custom settings may be lost."
+msgstr ""
+
+msgctxt "#30128"
+msgid "Choose Back Up Location..."
+msgstr ""
+
+msgctxt "#30129"
+msgid "Back Up"
+msgstr ""
+
+msgctxt "#30130"
+msgid "Restore"
+msgstr ""
+
+msgctxt "#30131"
+msgid "Click to - Restore Channels."
+msgstr ""
+
+msgctxt "#30132"
+msgid "Click to - Fully Reset On-TappTV. ALL settings will be lost inc. user/pass."
+msgstr ""
+
+#empty strings from id 30133 to 30149
 
 msgctxt "#30150"
-msgid "Oops, sorry about that!"
+msgid "ERROR -  Possible unicode text error."
 msgstr ""
 
 msgctxt "#30151"
-msgid "It was not possible to load program data,"
+msgid "There was a problem loading the listings."
 msgstr ""
 
 msgctxt "#30152"
-msgid "check settings or try again later..."
+msgid "Please contact support."
 msgstr ""
 
 msgctxt "#30153"
@@ -206,6 +230,10 @@ msgstr ""
 
 msgctxt "#30159"
 msgid "Channel configuration, etc. is unfortunately lost."
+msgstr ""
+
+msgctxt "#30160"
+msgid "Please check your account or the Add-on settings."
 msgstr ""
 
 #empty strings from id 30160 to 30199
@@ -237,7 +265,7 @@ msgid "Cancel"
 msgstr ""
 
 msgctxt "#30304"
-msgid "Choose stream"
+msgid "Choose Stream"
 msgstr ""
 
 msgctxt "#30305"
@@ -245,7 +273,7 @@ msgid ""
 msgstr ""
 
 msgctxt "#30306"
-msgid "Remove stream file"
+msgid "Remove Stream"
 msgstr ""
 
 msgctxt "#30307"
@@ -253,7 +281,7 @@ msgid "Channels"
 msgstr ""
 
 msgctxt "#30308"
-msgid "Quit"
+msgid "Close Menu"
 msgstr ""
 
 msgctxt "#30309"
@@ -261,18 +289,50 @@ msgid "Categories"
 msgstr ""
 
 msgctxt "#30310"
-msgid "Seleciones Categoria de la lista."
+msgid "Choose a category from the list."
 msgstr ""
 
 msgctxt "#30311"
-msgid "Guardar"
+msgid "Save"
 msgstr ""
 
 msgctxt "#30312"
 msgid "Cancel"
 msgstr ""
 
-#empty strings from id 30312 to 30499
+msgctxt "#30313"
+msgid "Settings"
+msgstr ""
+
+msgctxt "#30314"
+msgid "iPlayer"
+msgstr ""
+
+msgctxt "#30315"
+msgid "Super Search"
+msgstr ""
+
+msgctxt "#30316"
+msgid "ITV Player"
+msgstr ""
+
+msgctxt "#30317"
+msgid "Super Favourites"
+msgstr ""
+
+msgctxt "#30318"
+msgid "VPN"
+msgstr ""
+
+msgctxt "#30319"
+msgid "My Recordings"
+msgstr ""
+
+msgctxt "#30320"
+msgid "On-Tapp.TV Tools"
+msgstr ""
+
+#empty strings from id 30321 to 30499
 
 msgctxt "#30500"
 msgid "[B]Edit channel order and visibility[/B]"
@@ -297,7 +357,7 @@ msgid "[B]Setup stream[/B]"
 msgstr ""
 
 msgctxt "#30601"
-msgid ".strm file"
+msgid "Playlist or .strm"
 msgstr ""
 
 msgctxt "#30602"
@@ -325,10 +385,13 @@ msgid "Stop preview"
 msgstr ""
 
 msgctxt "#30608"
-msgid "Mash Up"
+msgid "Super Favourites"
 msgstr ""
 
-#empty strings from id 30609 to 30609
+msgctxt "#30609"
+msgid "IPTV PlayList"
+msgstr ""
+
 
 msgctxt "#30610"
 msgid "Browse..."
@@ -345,10 +408,15 @@ msgid "Choose a favourite below."
 msgstr ""
 
 msgctxt "#30621"
-msgid "Choose a Mash Up channel below."
+msgid "Choose a channel below."
 msgstr ""
 
-#empty strings from id 30622 to 30699
+
+msgctxt "#30622"
+msgid "Click Browse... below and navigate to your Super Favourite. When you have chosen it you can preview the stream to test if it works in On-Tapp."
+msgstr ""
+
+#empty strings from id 30623 to 30699
 
 msgctxt "#30700"
 msgid "Multiple addons provide this channels.[CR]Choose one to watch the stream."

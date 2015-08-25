@@ -2,9 +2,19 @@
 import xbmc
 import xbmcaddon
 import xbmcgui
+import os
+import dixie
+
+ADDON = xbmcaddon.Addon(id = 'script.tvguidedixie')
+HOME  = ADDON.getAddonInfo('path')
+ICON  = os.path.join(HOME, 'icon.png')
+ICON  = xbmc.translatePath(ICON)
 
 
 def CheckIdle(maxIdle):
+    if maxIdle == 0:
+        return
+    
     idle = xbmc.getGlobalIdleTime()
     if idle < maxIdle:
         return
@@ -12,7 +22,7 @@ def CheckIdle(maxIdle):
     delay = 60
     count = delay
     dp = xbmcgui.DialogProgress()
-    dp.create("TV Guide Micro","Streaming will automatically quit in %d seconds" % count, "Press Cancel to contine viewing")
+    dp.create("OnTappTV","Streaming will automatically quit in %d seconds" % count, "Press Cancel to contine viewing")
     dp.update(0)
               
     while xbmc.Player().isPlaying() and count > 0 and not dp.iscanceled():
@@ -28,128 +38,255 @@ def CheckIdle(maxIdle):
         xbmc.Player().stop()
 
 
-def play(url, windowed):
-    ADDON = xbmcaddon.Addon(id = 'script.tvguidemicro')
-    maxIdle = int(ADDON.getSetting('idle')) * 60 * 60
+def get_params(p):
+    param=[]
+    paramstring=p
+    if len(paramstring)>=2:
+        params=p
+        cleanedparams=params.replace('?','')
+        if (params[len(params)-1]=='/'):
+           params=params[0:len(params)-2]
+        pairsofparams=cleanedparams.split('&')
+        param={}
+        for i in range(len(pairsofparams)):
+            splitparams={}
+            splitparams=pairsofparams[i].split('=')
+            if (len(splitparams))==2:
+                param[splitparams[0]]=splitparams[1]
+    return param
+
+
+def playSF(url):
+    try:
+        if url.startswith('__SF__'):
+            url = url.replace('__SF__', '')
+
+        if url.lower().startswith('playmedia'):
+            xbmc.executebuiltin(url)
+            return True, ''
+
+        if url.lower().startswith('runscript'):
+            xbmc.executebuiltin(url)
+            return True, ''
+
+
+        if url.lower().startswith('activatewindow'):
+            import sys
+            sfAddon = xbmcaddon.Addon(id = 'plugin.program.super.favourites')
+            sfPath  = sfAddon.getAddonInfo('path')
+            sys.path.insert(0, sfPath)
+
+            import favourite
+            import re
+            import urllib
+
+            original = re.compile('"(.+?)"').search(url).group(1)
+
+            original = original.replace('%26', 'SF_AMP_SF') #protect '&' within parameters
+
+            cmd = urllib.unquote_plus(original)            
+
+            try:    noFanart = favourite.removeFanart(cmd)
+            except: pass
+
+            try:    noFanart = favourite.removeSFOptions(cmd)
+            except: pass
+
+            if noFanart.endswith(os.path.sep):
+               noFanart = noFanart[:-1]
+
+            noFanart = noFanart.replace('+', '%2B')
+            noFanart = noFanart.replace(' ', '+')
+
+            url = url.replace(original, noFanart)
+            url = url.replace('SF_AMP_SF', '%26') #put '&' back
+
+            xbmc.executebuiltin(url)
+            return True, ''
+
+        import urllib
+        params = url.split('?', 1)[-1]    
+        params = get_params(params)
+
+        try:    mode = int(urllib.unquote_plus(params['mode']))
+        except: return False, url
+
+        if mode != 400:
+            return False, url
+        
+        try:    path = urllib.unquote_plus(params['path'])
+        except: path = None
+
+        dirs = []
+        if path:          
+            try:    current, dirs, files = os.walk(path).next()
+            except: pass
+            
+            if len(dirs) == 0:
+                import sys
+
+                path = os.path.join(path, 'favourites.xml')
+
+                sfAddon = xbmcaddon.Addon(id = 'plugin.program.super.favourites')
+                sfPath  = sfAddon.getAddonInfo('path')
+
+                sys.path.insert(0, sfPath)
+
+                import favourite
+                faves = favourite.getFavourites(path)
+
+                if len(faves) == 1:
+                    fave = faves[0][2]
+                    if fave.lower().startswith('playmedia'):
+                        import re
+                        cmd = re.compile('"(.+?)"').search(fave).group(1)
+                        return False, cmd
+
+    except Exception, e:
+        print str(e)
+        pass
+
+    url = 'ActivateWindow(10025,%s)' % url
+    xbmc.executebuiltin(url)
+    return True, ''
+
+
+def play(url, windowed, name=None):
+    windowID  = xbmcgui.getCurrentWindowId()
+    initSleep = 1
+ 
+    isZeus = 'plugin.video.zeus' in url
+    if isZeus:
+        xbmc.executebuiltin('ActivateWindow(10025,plugin://plugin.video.zeus)')
+        initSleep = 20000 
+ 
+    getIdle = int(ADDON.getSetting('idle').replace('Never', '0'))
+    maxIdle = getIdle * 60 * 60
+ 
+    if (url.startswith('__SF__')) or ('plugin://plugin.program.super.favourites' in url.lower()):
+        handled, sfURL = playSF(url)
+        if handled:
+            if isZeus:
+                while not xbmc.Player().isPlaying() and initSleep > 0:
+                    initSleep -= 1
+                    xbmc.sleep(1000)
+                while xbmc.Player().isPlaying():
+                    xbmc.sleep(1000)
+                    CheckIdle(maxIdle)
+                xbmc.executebuiltin('ActivateWindow(%d)' % windowID)
+            return
+        else:
+            url = sfURL
+ 
+    if url.lower().startswith('plugin://plugin.video.skygo'):
+        xbmc.executebuiltin('XBMC.RunPlugin(%s)' % url)
+        return
+ 
+    dixie.SetSetting('streamURL', url)
+ 
     if not checkForAlternateStreaming(url):
-        xbmc.Player().play(item = url, windowed = windowed)
-        print '****** Attempt 1 ******'
-        print url
-        xbmc.sleep(100)
+        item = url
+        if name:
+            item     = xbmcgui.ListItem(name, thumbnailImage=ICON)
+            playlist = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
+            playlist.clear()
+            playlist.add(url, item)
+            item = playlist
+ 
+        xbmc.Player().play(item, windowed=windowed)
+ 
+        xbmc.sleep(1000)
         if not xbmc.Player().isPlaying():
             xbmc.executebuiltin('XBMC.RunPlugin(%s)' % url)
-            print '****** Attempt 2 ******'
-            print url
-
-    xbmc.sleep(1000)
+ 
+    while not xbmc.Player().isPlaying() and initSleep > 0:
+        initSleep -= 1
+        xbmc.sleep(1000)
+ 
     while xbmc.Player().isPlaying():
-        xbmc.sleep(5000)
+        xbmc.sleep(1000)
         CheckIdle(maxIdle)
-
+ 
+    xbmc.executebuiltin('ActivateWindow(%d)' % windowID)
 
 def checkForAlternateStreaming(url):
-    if "plugin.video.ntv" in url:
-        print '****** Alternate NTV ******'
-        print url
-        return alternateStreamNTV(url)
-
-    # if 'plugin.video.expattv' in url:
-    #     print '****** Alternate  ExPat ******'
-    #     print url
-    #     return alternateStream(url)
-
-    if 'plugin.video.microtv' in url:
-        print '****** Alternate  Micro TV ******'
-        print url
+    if 'plugin.video.expattv' in url:
         return alternateStream(url)
 
     if 'plugin.video.filmon' in url:
-        print '****** Alternate  FilmOn ******'
-        print url
         return alternateStream(url)
 
     if 'plugin.video.notfilmon' in url:
-        print '****** Alternate NotFilmOn ******'
-        print url
         return alternateStream(url)
         
-    if 'plugin.video.itv' in url:
-        print '****** Alternate ITV ******'
-        print url
+    if 'plugin.video.itv' in url:        
         return alternateStream(url)
         
     if 'plugin.video.iplayer' in url:
-        print '****** Alternate iPlayer ******'
-        print url
         return alternateStream(url)
         
     if 'plugin.video.musicvideojukebox' in url:
-        print '****** Alternate JukeBox ******'
-        print url
         return alternateStream(url)
         
-    if 'plugin.video.muzu.tv' in url:
-        print '****** Alternate Muzu ******'
-        print url
+    if 'plugin.video.muzu.tv' in url:        
         return alternateStream(url)
         
-    if 'plugin.audio.ramfm' in url:
-        print '****** Alternate RAM FM ******'
-        print url
+    if 'plugin.audio.ramfm' in url:        
         return alternateStream(url)
         
     if 'plugin.video.movie25' in url:
-        print '****** Alternate MashUp ******'
-        print url
         return alternateStream(url)
         
+    if 'plugin.video.irishtv' in url:
+        return alternateStream(url)
+        
+    if 'plugin.video.F.T.V' in url:        
+        return alternateStream(url)
+
+    if 'plugin.video.sportsaholic' in url:        
+        return alternateStream(url)
+        
+    if 'plugin.video.navi-x' in url:        
+        return alternateStream(url)
+
+    if 'plugin.video.mxnews' in url:        
+        return alternateStream(url)
+
+    if 'plugin.program.skygo.launcher' in url:        
+        return alternateStream(url)
+
+    if 'plugin.program.advanced.launcher' in url:        
+        return alternateStream(url)
+
+    if 'plugin.video.iplayer' in url:        
+        return alternateStream(url)
+
+    if 'plugin.video.stalker' in url:
+        return alternateStream(url)
+
+    if 'plugin.video.sparky' in url:
+        return alternateStream(url)
+
+    if 'plugin.video.sportsmania' in url:
+        return alternateStream(url)
+
     return False
 
-
-
 def alternateStream(url):
-        
-        xbmc.executebuiltin('XBMC.RunPlugin(%s)' % url)
-        retries = 10
-        while retries > 0 and not xbmc.Player().isPlaying():
-            retries -= 1
-            xbmc.sleep(1000)
+    xbmc.executebuiltin('XBMC.RunPlugin(%s)' % url)
     
-        print '****** Alternate Method ******'
-        print url
-        return True
-
-
-def alternateStreamNTV(url):
-
-#url=url.replace('mode=200','mode=201')
+    retries = 10
+    while retries > 0 and not xbmc.Player().isPlaying():
+        retries -= 1
+        xbmc.sleep(1000)
         
-        xbmc.executebuiltin('XBMC.RunPlugin(%s)' % url)
+    return True
 
-        xbmc.executebuiltin('xbmc.PlayMedia('+url+')')
-        
-        retries = 10
-        while retries > 0 and not xbmc.Player().isPlaying():
-            retries -= 1
-            xbmc.sleep(1000)
-        
-        print '****** Alternate Method ******'
-        print url
-        return True
 
 
 if __name__ == '__main__': 
-    play(sys.argv[1], sys.argv[2] == 1)
+    name = None
+    if len(sys.argv) > 3:
+        name = sys.argv[3]
 
-
-# expattv
-# static.filmon.com
-# notfilmon
-# plugin.video.iplayer
-# plugin.video.itv
-# plugin.video.youtube
-# plugin.video.musicvideojukebox
-# plugin.video.muzu.tv
-# plugin.audio.ramfm
-# plugin.video.tgun
-# plugin.video.movie25
+    play(sys.argv[1], sys.argv[2] == 1, name)

@@ -2,7 +2,7 @@
 #      Copyright (C) 2013 Tommy Winther
 #      http://tommy.winther.nu
 #
-#  This Program is free software; you can redistribute it and/or modify
+#  This Program is free software; you can redistribute it and/or modifye
 #  it under the terms of the GNU General Public License as published by
 #  the Free Software Foundation; either version 2, or (at your option)
 #  any later version.
@@ -17,6 +17,7 @@
 #  the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
 #  http://www.gnu.org/copyleft/gpl.html
 #
+
 import StringIO
 import os
 import threading
@@ -24,7 +25,9 @@ import datetime
 import time
 import urllib2
 import urllib
+
 from xml.etree import ElementTree
+
 import buggalo
 import xbmcaddon
 import xbmcplugin
@@ -33,104 +36,81 @@ import xbmc
 import xbmcgui
 import xbmcvfs
 import sqlite3
-import base64
 
-SOURCE     = ADDON.getSetting('source')
-DIXIEURL   = ADDON.getSetting('dixie.url')
-DIXIELOGOS = ADDON.getSetting('dixie.logo.folder')
-XMLTVLOGOS = ADDON.getSetting('xmltv.logo.folder')
-datapath   = xbmc.translatePath(ADDON.getAddonInfo('profile'))
-extras     = os.path.join(datapath, 'extras')
-logopath   = os.path.join(extras, 'logos')
-logos      = None
+from channel import Channel
 
-if SOURCE == 'ProyectoLuzDigital TV':
+import dixie
+import settings
+
+import re
+import io
+
+
+SOURCE      = dixie.GetSetting('source')
+DIXIEURL    = dixie.GetSetting('dixie.url').upper()
+DIXIELOGOS  = dixie.GetSetting('dixie.logo.folder')
+PREVLOGO    = dixie.GetSetting('PREVLOGO')
+GMTOFFSET   = dixie.GetGMTOffset()
+LOGOCHANGED = DIXIELOGOS != PREVLOGO
+
+datapath    = xbmc.translatePath('special://profile/addon_data/script.tvguidedixie/')
+channelPath = os.path.join(datapath, 'channels')
+extras      = os.path.join(datapath, 'extras')
+logopath    = os.path.join(extras, 'logos')
+
+
+try:    os.makedirs(channelPath)
+except: pass
+
+
+settingsFile = os.path.join(xbmc.translatePath(ADDON.getAddonInfo('profile')), 'settings.cfg')
+
+USE_DB_FILE = True
+
+if len (DIXIELOGOS):
     logos = os.path.join(logopath, DIXIELOGOS)
 else:
-    logos = XMLTVLOGOS
-
-print '*************** LOGO PACK **************'
-print logos
+    logos = dixie.SetSetting('dixie.logo.folder', 'None')
 
 
-################### MIGRATE SETTINGS ###################
-if SOURCE == 'XMLTV':
-    ADDON.setSetting('categories', '')
+SETTINGS_TO_CHECK = ['dixie.url']
 
-if DIXIEURL == 'North America':
-    ADDON.setSetting('dixie.url', 'Dixie')
 
-if DIXIEURL == 'SmoothStreams':
-    ADDON.setSetting('dixie.url', 'XPat Planet')
+def GetDixieUrl():
+    return dixie.GetDixieUrl(DIXIEURL)
 
-if DIXIEURL == 'Datho Digital - DC Listings':
-    ADDON.setSetting('dixie.url', 'XPat Planet')
 
-if DIXIEURL == 'OffSide':
-    ADDON.setSetting('dixie.url', 'canales tv')
+def CleanFilename(text):
+    text = text.replace('*', '_star')
+    text = text.replace('+', '_plus')
+    text = text.replace(' ', '_')
 
-if DIXIEURL == 'NTV':
-    ADDON.setSetting('dixie.url', 'canales tv')
+    text = re.sub('[:\\/?\<>|"]', '', text)
+    text = text.strip()
+    try:    text = text.encode('ascii', 'ignore')
+    except: text = text.decode('utf-8').encode('ascii', 'ignore')
 
-if DIXIEURL == 'PLUGINSXBMC':
-    ADDON.setSetting('dixie.url', 'canales tv')
-
-   
-
-SETTINGS_TO_CHECK = ['source', 'xmltv.file', 'xmltv.logo.folder', 'dixie.url', 'dixie.logo.folder', 'gmtfrom']
-
-class Channel(object):
-    #SJP1 categories parameter moved to end
-    def __init__(self, id, title, logo = None, streamUrl = None, visible = True, weight = -1, categories = ''):
-        self.id = id
-        self.title = title
-        self.categories = categories
-        self.logo = logo
-        self.streamUrl = streamUrl
-        self.visible = visible
-        self.weight = weight
-
-    def isPlayable(self):
-        return hasattr(self, 'streamUrl') and self.streamUrl
-
-    def __eq__(self, other):
-        return self.id == other.id
-
-    def __repr__(self):
-        return 'Channel(id=%s, title=%s, categories=%s, logo=%s, streamUrl=%s)' \
-               % (self.id, self.title, self.categories, self.logo, self.streamUrl)
-
+    return text
 
 
 class Program(object):
     def __init__(self, channel, title, startDate, endDate, description, subTitle, imageLarge = None, imageSmall = None, notificationScheduled = None):
-        """
 
-        @param channel:
-        @type channel: source.Channel
-        @param title:
-        @param startDate:
-        @param endDate:
-        @param description:
-        @param subTitle:
-        @param imageLarge:
-        @param imageSmall:
-        """
-        self.channel = channel
-        self.title = title
+        self.channel   = channel
+        self.title     = title
         self.startDate = startDate
-        self.endDate = endDate
+        self.endDate   = endDate
         self.description = description
-        self.subTitle = subTitle
-        self.imageLarge = imageLarge
-        self.imageSmall = imageSmall
+        self.subTitle    = subTitle
+        self.imageLarge  = imageLarge
+        self.imageSmall  = imageSmall
         self.notificationScheduled = notificationScheduled
         
-
 
     def __repr__(self):
         return 'Program(channel=%s, title=%s, startDate=%s, endDate=%s, description=%s, subTitle=%s, imageLarge=%s, imageSmall=%s)' % \
             (self.channel, self.title, self.startDate, self.endDate, self.description, self.subTitle, self.imageLarge, self.imageSmall)
+
 
 class SourceException(Exception):
     pass
@@ -149,10 +129,11 @@ class DatabaseSchemaException(sqlite3.DatabaseError):
 
 
 class Database(object):
-    SOURCE_DB = 'source.db'
+    PROGRAM_DB = 'program.db'
 
     def __init__(self, nChannel):
-        self.conn = None
+        self.connP = None
+
         self.eventQueue = list()
         self.event = threading.Event()
         self.eventResults = dict()
@@ -169,17 +150,20 @@ class Database(object):
         for key in SETTINGS_TO_CHECK:
            buggalo.addExtraData('setting: %s' % key, ADDON.getSetting(key))
 
-        self.channelList = list()
+        self.channelList = []
+        self.channelDict = {}
 
         profilePath = xbmc.translatePath(ADDON.getAddonInfo('profile'))
         if not os.path.exists(profilePath):
             os.makedirs(profilePath)
-        self.databasePath = os.path.join(profilePath, Database.SOURCE_DB)
+
+        self.programPath = os.path.join(profilePath, Database.PROGRAM_DB)
 
         threading.Thread(name='Database Event Loop', target=self.eventLoop).start()
 
+
     def eventLoop(self):
-        print 'Database.eventLoop() >>>>>>>>>> starting...'
+        dixie.log('Database.eventLoop() >>>>>>>>>> starting...')
         while True:
             self.event.wait()
             self.event.clear()
@@ -189,14 +173,16 @@ class Database(object):
             command = event[0]
             callback = event[1]
 
-            print 'Database.eventLoop() >>>>>>>>>> processing command: ' + command.__name__
+            dixie.log('Database.eventLoop() >>>>>>>>>> processing command: %s' % command.__name__)
 
             try:
                 result = command(*event[2:])
                 self.eventResults[command.__name__] = result
 
                 if callback:
-                    if self._initialize == command:
+                    if self._initializeS == command:
+                        threading.Thread(name='Database callback', target=callback, args=[result]).start()
+                    elif self._initializeP == command:
                         threading.Thread(name='Database callback', target=callback, args=[result]).start()
                     else:
                         threading.Thread(name='Database callback', target=callback).start()
@@ -205,12 +191,12 @@ class Database(object):
                     del self.eventQueue[:]
                     break
 
-
-            except Exception:
-                print 'Database.eventLoop() >>>>>>>>>> exception!'
+            except Exception, e:
+                dixie.log('Database.eventLoop() >>>>>>>>>> exception! %s' % str(e))
                 buggalo.onExceptionRaised()
 
-        print 'Database.eventLoop() >>>>>>>>>> exiting...'
+        dixie.log('Database.eventLoop() >>>>>>>>>> exiting...')
+
 
     def _invokeAndBlockForResult(self, method, *args):
         event = [method, None]
@@ -225,11 +211,43 @@ class Database(object):
         del self.eventResults[method.__name__]
         return result
 
-    def initialize(self, callback, cancel_requested_callback=None):
-        self.eventQueue.append([self._initialize, callback, cancel_requested_callback])
+
+    def initializeS(self, callback, cancel_requested_callback=None):
+        self.eventQueue.append([self._initializeS, callback, cancel_requested_callback])
+        self.event.set()                
+
+
+    def initializeP(self, callback, cancel_requested_callback=None):
+        self.eventQueue.append([self._initializeP, callback, cancel_requested_callback])
         self.event.set()
 
-    def _initialize(self, cancel_requested_callback):
+
+    def _initializeS(self, cancel_requested_callback):
+        # if not LOGOCHANGED:
+        #     return True
+
+        folder   = 'special://profile/addon_data/script.tvguidedixie/extras/logos/'
+        noLogo   =  DIXIELOGOS.lower() == 'none'
+        channels =  self.getAllChannels()
+        
+        for ch in channels:  
+            channel = self.getChannelFromFile(ch)
+            if channel == None:
+                continue
+
+            if noLogo:
+                channel.logo = ''
+            else:
+                logoFile     = os.path.join(folder, DIXIELOGOS, channel.title + '.png')
+                channel.logo = logoFile
+
+            self.replaceChannel(channel)  
+
+        dixie.SetSetting('PREVLOGO', DIXIELOGOS)
+        return True
+
+
+    def _initializeP(self, cancel_requested_callback):
         sqlite3.register_adapter(datetime.datetime, self.adapt_datetime)
         sqlite3.register_converter('timestamp', self.convert_datetime)
 
@@ -239,210 +257,232 @@ class Database(object):
                 break
 
             try:
-                self.conn = sqlite3.connect(self.databasePath, detect_types=sqlite3.PARSE_DECLTYPES)
-                self.conn.execute('PRAGMA foreign_keys = ON')
-                self.conn.row_factory = sqlite3.Row
+                self.openP()
 
                 # create and drop dummy table to check if database is locked
-                c = self.conn.cursor()
+                c = self.connP.cursor()
                 c.execute('CREATE TABLE IF NOT EXISTS database_lock_check(id TEXT PRIMARY KEY)')
                 c.execute('DROP TABLE database_lock_check')
                 c.close()
 
-                self._createTables()
+                self._createTable()
                 self.settingsChanged = self._wasSettingsChanged(ADDON)
                 break
 
             except sqlite3.OperationalError:
                 if cancel_requested_callback is None:
-                    xbmc.log('[script.tvguidetest] Database is locked, bailing out...', xbmc.LOGDEBUG)
+                    xbmc.log('[script.tvguidedixie] EPG Database is locked, bailing out...', xbmc.LOGDEBUG)
                     break
                 else:  # ignore 'database is locked'
-                    xbmc.log('[script.tvguidemicro] Database is locked, retrying...', xbmc.LOGDEBUG)
+                    xbmc.log('[script.tvguidedixie] EPG Database is locked, retrying...', xbmc.LOGDEBUG)
 
             except sqlite3.DatabaseError:
-                self.conn = None
+                self.connP = None
                 if self.alreadyTriedUnlinking:
-                    xbmc.log('[script.tvguidemicro] Database is broken and unlink() failed', xbmc.LOGDEBUG)
+                    xbmc.log('[script.tvguidedixie] EPG Database is broken and unlink() failed', xbmc.LOGDEBUG)
                     break
                 else:
                     try:
-                        os.unlink(self.databasePath)
+                        os.unlink(self.programPath)
                     except OSError:
                         pass
                     self.alreadyTriedUnlinking = True
                     xbmcgui.Dialog().ok(ADDON.getAddonInfo('name'), strings(DATABASE_SCHEMA_ERROR_1),
                                         strings(DATABASE_SCHEMA_ERROR_2), strings(DATABASE_SCHEMA_ERROR_3))
 
-        return self.conn is not None
+        return self.connP is not None
+
 
     def close(self, callback=None):
         self.eventQueue.append([self._close, callback])
         self.event.set()
 
+
     def _close(self):
+        self.closeS()
+        self.closeP()
+
+
+    def closeS(self):
+        return
+
+
+    def closeP(self):
+        #try:
+        #    # rollback any non-commit'ed changes to avoid database lock
+        #    if self.connP:
+        #        self.connP.rollback()
+        #except sqlite3.OperatiaonalError:
+        #    pass  # no transaction is active
+        if self.connP:
+            self.connP.close()
+            del self.connP
+
+
+    def openP(self):
+        self.connP = sqlite3.connect(self.programPath, detect_types=sqlite3.PARSE_DECLTYPES)
+        #self.connP.execute('PRAGMA foreign_keys = ON')
+        self.connP.row_factory = sqlite3.Row
+        self.calcUpdateLimit()
+
+
+    def parseDate(self, dateString):
         try:
-            # rollback any non-commit'ed changes to avoid database lock
-            if self.conn:
-                self.conn.rollback()
-        except sqlite3.OperationalError:
-            pass  # no transaction is active
-        if self.conn:
-            self.conn.close()
+            if type(dateString) in [str, unicode]:
+                dt = dateString.split('-')
+                return datetime.date(int(dt[0]), int(dt[1]) ,int(dt[2]))
+        except:
+            pass
+        return datetime.date(1900, 1, 1)
+
+
+    def calcUpdateLimit(self):
+        self.updateLimit = datetime.date(1900, 1, 1)
+        try:
+            c = self.connP.cursor()
+            c.execute('SELECT date FROM updates WHERE source=?', [self.source.KEY])
+            for row in c:
+                when = self.parseDate(row['date'])
+                if when > self.updateLimit:
+                    self.updateLimit = when
+        except:
+            pass
+        c.close()
+
+
+    def removeProgramDB(self):
+        self.closeP()
+        try:
+            os.remove(self.programPath)
+        except Exception, e:
+            pass
+
 
     def _wasSettingsChanged(self, addon):
         settingsChanged = False
-        noRows = True
-        count = 0
-
-        c = self.conn.cursor()
-        c.execute('SELECT * FROM settings')
-        for row in c:
-            noRows = False
-            key = row['key']
-            if SETTINGS_TO_CHECK.count(key):
+        count           = 0
+        
+        params = settings.getAll(settingsFile)
+        
+        for pair in params:
+            param = pair[0]
+            if param in SETTINGS_TO_CHECK:
                 count += 1
-                if row['value'] != addon.getSetting(key):
+                if pair[1] != addon.getSetting(param):
                     settingsChanged = True
 
         if count != len(SETTINGS_TO_CHECK):
             settingsChanged = True
 
-        if settingsChanged or noRows:
-            for key in SETTINGS_TO_CHECK:
-                value = addon.getSetting(key).decode('utf-8', 'ignore')
-                c.execute('INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)', [key, value])
-                if not c.rowcount:
-                    c.execute('UPDATE settings SET value=? WHERE key=?', [value, key])
-            self.conn.commit()
+        #update (or create) file
+        if settingsChanged or len(params) == 0:
+            for param in SETTINGS_TO_CHECK:
+                value = addon.getSetting(param).decode('utf-8', 'ignore')
+                settings.set(param, value, settingsFile)
 
-        c.close()
-        print 'Settings changed: ' + str(settingsChanged)
+        dixie.log('Settings changed: ' + str(settingsChanged))
         return settingsChanged
+
 
     def _isCacheExpired(self, date):
         if self.settingsChanged:
             return True
-        
+
         channelsLastUpdated = datetime.datetime.fromtimestamp(0)
         programsLastUpdated = datetime.datetime.fromtimestamp(0)
 
-        # check if channel data is up-to-date in database
         try:
-            c = self.conn.cursor()
-            c.execute('SELECT channels_updated FROM sources WHERE id=?', [self.source.KEY])
-            row = c.fetchone()
-            if not row:
-                return True
-            channelsLastUpdated = row['channels_updated']
-            c.close()
-        except TypeError:
-            return True
+            when = settings.get('ChannelsUpdated', settingsFile)
+            channelsLastUpdated = datetime.datetime.fromtimestamp(float(when))
+        except:
+            channelsLastUpdated = datetime.datetime.fromtimestamp(0)        
 
-        # check if program data is up-to-date in database
-        dateStr = date.strftime('%Y-%m-%d')
-        c = self.conn.cursor()
-        c.execute('SELECT programs_updated FROM updates WHERE source=? AND date=?', [self.source.KEY, dateStr])
-        row = c.fetchone()
-        if row:
-            programsLastUpdated = row['programs_updated']
+        try:
+            dateStr = date.strftime('%Y-%m-%d')
+            c = self.connP.cursor()
+            c.execute('SELECT programs_updated FROM updates WHERE source=? AND date=?', [self.source.KEY, dateStr])
+            row = c.fetchone()
+            if row:
+                programsLastUpdated = row['programs_updated']
+        except:
+            pass        
         c.close()
 
         return self.source.isUpdated(channelsLastUpdated, programsLastUpdated)
+
 
     def updateChannelAndProgramListCaches(self, callback, date = datetime.datetime.now(), progress_callback = None, clearExistingProgramList = True):
         self.eventQueue.append([self._updateChannelAndProgramListCaches, callback, date, progress_callback, clearExistingProgramList])
         self.event.set()
 
+
     def _updateChannelAndProgramListCaches(self, date, progress_callback, clearExistingProgramList):
-        # todo workaround service.py 'forgets' the adapter and convert set in _initialize.. wtf?!
         sqlite3.register_adapter(datetime.datetime, self.adapt_datetime)
         sqlite3.register_converter('timestamp', self.convert_datetime)
 
         if not self._isCacheExpired(date):
             return
+        
+        dixie.BackupChannels()
 
         self.updateInProgress = True
         self.updateFailed = False
         dateStr = date.strftime('%Y-%m-%d')
-        c = self.conn.cursor()
+
+        if len(self.channelDict) == 0:
+            channels = self.getAllChannels()
+            for channel in channels:
+                theChannel = self.getChannelFromFile(channel)
+                if theChannel:
+                    self.channelDict[channel] = theChannel
+
         try:
-            xbmc.log('[script.tvguidemicro] Updating caches...', xbmc.LOGDEBUG)
+            xbmc.log('[script.tvguidedixie] Updating caches...', xbmc.LOGDEBUG)
             if progress_callback:
                 progress_callback(0)
 
+            dixie.GetCats()
+
             if self.settingsChanged:
-                self.source.doSettingsChanged(c)
+                self.source.doSettingsChanged()
+
             self.settingsChanged = False # only want to update once due to changed settings
 
-            clearExistingProgramList = True
-            if clearExistingProgramList:
-                c.execute("DELETE FROM updates WHERE source=?", [self.source.KEY])  # cascades and deletes associated programs records
-            else:
-                c.execute("DELETE FROM updates WHERE source=? AND date=?", [self.source.KEY, dateStr])  # cascades and deletes associated programs records
+            toDelete = self.getAllChannels()
 
-            # programs updated
-            #c.execute("INSERT INTO updates(source, date, programs_updated) VALUES(?, ?, ?)", [self.source.KEY, dateStr, datetime.datetime.now()])
-            updatesId = c.lastrowid
-            c.execute("DELETE FROM programs WHERE source=?", [self.source.KEY])
-            
-            startDates = []
+            weight = 0
 
             imported = imported_channels = imported_programs = 0
             for item in self.source.getDataFromExternal(date, progress_callback):
                 imported += 1
 
-                if imported % 10000 == 0:
-                    self.conn.commit()
-
                 if isinstance(item, Channel):
                     imported_channels += 1
                     channel = item
-                    c.execute('INSERT OR IGNORE INTO channels(id, title, categories, logo, stream_url, visible, weight, source) VALUES(?, ?, ?, ?, ?, ?, (CASE ? WHEN -1 THEN (SELECT COALESCE(MAX(weight)+1, 0) FROM channels WHERE source=?) ELSE ? END), ?)', [channel.id, channel.title, channel.categories, channel.logo, channel.streamUrl, channel.visible, channel.weight, self.source.KEY, channel.weight, self.source.KEY])
-                    if not c.rowcount:
-                        c.execute('UPDATE channels SET title=?, categories=?, logo=?, stream_url=?, visible=(CASE ? WHEN -1 THEN visible ELSE ? END), weight=(CASE ? WHEN -1 THEN weight ELSE ? END) WHERE id=? AND source=?',
-                            [channel.title, channel.categories, channel.logo, channel.streamUrl, channel.weight, channel.visible, channel.weight, channel.weight, channel.id, self.source.KEY])
 
-                elif isinstance(item, Program):
-                    imported_programs += 1
-                    program = item
-                    if isinstance(program.channel, Channel):
-                        channel = program.channel.id
-                    else:
-                        channel = program.channel
-                        
-                    if program.startDate.date() not in startDates:
-                        startDates.append(program.startDate.date())
-                    
-                    try:   
-                        c.execute('INSERT INTO programs(channel, title, start_date, end_date, description, subTitle, image_large, image_small, source, updates_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                            [channel, program.title, program.startDate, program.endDate, program.description, program.subTitle, program.imageLarge, program.imageSmall, self.source.KEY, updatesId])
-                    except:
-                        print "*****ERROR****"
-                        print "program.startDate = %s : type = %s" % (str(program.startDate), str(type(program.startDate)))
-                        print "program.endDate   = %s : type = %s" % (str(program.endDate),   str(type(program.endDate)))
-                        raise
-                        
-            # programs updated
-            if len(startDates) > 0:
-                startDates.sort()
-                startDates = startDates[:-1] #remove last date, will cause new data to be fetched when just 1 day of data left
-                for date in startDates:        
-                    dateStr = date.strftime('%Y-%m-%d')
-                    c.execute("INSERT INTO updates(source, date, programs_updated) VALUES(?, ?, ?)", [self.source.KEY, dateStr, datetime.datetime.now()])
-                
-            # channels updated
-            c.execute("UPDATE sources SET channels_updated=? WHERE id=?", [datetime.datetime.now(), self.source.KEY])
-            self.conn.commit()
+                    clean = CleanFilename(channel.id)
+                    if clean in toDelete:
+                        toDelete.remove(clean)
 
-            if imported_channels == 0 or imported_programs == 0:
+                    weight += 1
+                    channel.weight = weight
+                    self.createChannel(channel)                                   
+                        
+            #channels updated
+            try:    settings.set('ChannelsUpdated', self.adapt_datetime(datetime.datetime.now()), settingsFile)
+            except: pass
+
+            self.deleteOldChannels(toDelete)
+
+            if imported_channels == 0:
                 self.updateFailed = True
-
+            if imported_programs == 0:
+                self.updateFailed = (not USE_DB_FILE)
+  
         except SourceUpdateCanceledException:
             # force source update on next load
-            c.execute('UPDATE sources SET channels_updated=? WHERE id=?', [0, self.source.KEY])
-            c.execute("DELETE FROM updates WHERE source=?", [self.source.KEY]) # cascades and deletes associated programs records
-            self.conn.commit()
+            try:    settings.set('ChannelsUpdated', 0, settingsFile)
+            except: pass
 
         except Exception:
             import traceback as tb
@@ -451,23 +491,149 @@ class Database(object):
             tb.print_exception(etype, value, traceback)
 
             try:
-                self.conn.rollback()
-            except sqlite3.OperationalError:
-                pass # no transaction is active
-
-            try:
                 # invalidate cached data
-                c.execute('UPDATE sources SET channels_updated=? WHERE id=?', [0, self.source.KEY])
-                self.conn.commit()
-            except sqlite3.OperationalError:
-                pass # database is locked
+                try:    settings.set('ChannelsUpdated', 0, settingsFile)
+                except: pass
+               
+            except:
+                pass
 
             self.updateFailed = True
-        finally:
+
+        update = dixie.GetSetting('updated.channels')
+        if int(update) < 0:
+            dixie.SetSetting('updated.channels', 0)
+            dixie.SetSetting('current.channels', 0)
+        else:
+            dixie.SetSetting('current.channels', update)
+            self.channelDict = {}
             self.updateInProgress = False
-            c.close()
+
+        self.updateInProgress = False
+
+
+    def deleteOldChannels(self, toDelete):
+        dixie.log('START deleteOldChannels')
+
+        dixie.log('Pass 1')
+        dixie.log(toDelete)
+        for i in xrange(len(toDelete), 0, -1):
+            id = toDelete[i-1]
+            try:
+                channel = self.getChannelFromFile(id)
+                dixie.log(channel)
+
+                if channel.isClone == 1:
+                    original = id.split('_clone_')[0]
+                    dixie.log('Clone of %s' % original)
+                    if original not in toDelete:
+                        dixie.log('NOT removing clone %s' % id)
+                        toDelete.remove(id)
+
+                if channel.userDef == 1:
+                    dixie.log('NOT removing userdef %s' % id)
+                    toDelete.remove(id)
+
+            except Exception, e:
+                dixie.log('ERROR in deleteOldChannels %s' % str(e))
+
+        dixie.log('Pass 2')
+        dixie.log(toDelete)
+        for id in toDelete:
+            try:                
+                dixie.log('Channel %s no longer available' % id)
+                self.removeCleanChannel(id)
+            except:
+                pass
+
+        dixie.log('END deleteOldChannels')
+
+
+
+
+    def getAllChannels(self):
+        channels = []
+
+        try:
+            current, dirs, files = os.walk(channelPath).next()
+        except Exception, e:
+            dixie.log('Error in getAllChannels' % str(e))
+            return channels
+
+        for file in files:
+            channels.append(file)
+
+        return channels
+
+
+    def removeCleanChannel(self, id):
+        try:    del self.channelDict[id]
+        except: pass
+
+        path = os.path.join(channelPath, id)
+        if os.path.exists(path):
+            try:    os.remove(path)
+            except: pass            
+
+
+    def addChannel(self, channel):
+        self.addCleanChannel(channel, CleanFilename(channel.id))
+
+
+    def addCleanChannel(self, channel, id):
+        path = os.path.join(channelPath, id) 
+
+        if id not in self.channelDict:           
+            self.channelDict[id] = channel.clone()
+
+        if not os.path.exists(path): 
+            channel.writeToFile(path)
+
+
+    def replaceChannel(self, channel):
+        clean = CleanFilename(channel.id)
+
+        if clean in self.channelDict: 
+            if self.channelDict[clean].compare(channel):
+                return  
+
+        self.removeCleanChannel(clean)
+        self.addCleanChannel(channel, clean)
+
+
+    def createChannel(self, channel):
+        path = os.path.join(channelPath, channel.id)
+
+        if os.path.exists(path):
+            return
+
+        self.addChannel(channel)
+
+
+    def updateChannelLogo(self, channel):
+        ch = getChannelFromFile(channel.id)
+
+
+    def getChannelFromFile(self, id):
+        path = os.path.join(channelPath, id)
+
+        if not os.path.exists(path):
+            return None
+
+        f = open(path, mode='r')
+        cfg = f.readlines()
+        f.close
+
+        return Channel(cfg)
+        
+        ch = Channel(cfg[0], cfg[1], cfg[2], cfg[3], cfg[4], cfg[5], cfg[6])
+
+        return ch
+        
 
     def getEPGView(self, channelStart, date = datetime.datetime.now(), progress_callback = None, clearExistingProgramList = True, categories = None, nmrChannels=9):
+
+        date  -= GMTOFFSET
         result = self._invokeAndBlockForResult(self._getEPGView, channelStart, date, progress_callback, clearExistingProgramList, categories, nmrChannels)
 
         if self.updateFailed:
@@ -477,6 +643,13 @@ class Database(object):
 
 
     def _getEPGView(self, channelStart, date, progress_callback, clearExistingProgramList, categories, nmrChannels):
+        update = xbmcgui.Window(10000).getProperty('OTT_UPDATE')
+        if len(update) > 0:
+            self.removeProgramDB()
+            import update
+            update.newEPGAvailable()
+            self.openP()            
+
         self._updateChannelAndProgramListCaches(date, progress_callback, clearExistingProgramList)
         
         channels = self._getChannelList(onlyVisible = True, categories = categories)
@@ -501,6 +674,7 @@ class Database(object):
             idx = 0
         return channels[idx]
 
+
     def getPreviousChannel(self, currentChannel):
         channels = self.getChannelList()
         idx = channels.index(currentChannel)
@@ -509,20 +683,18 @@ class Database(object):
             idx = len(channels) - 1
         return channels[idx]
 
+
     def saveChannelList(self, callback, channelList):
         self.eventQueue.append([self._saveChannelList, callback, channelList])
         self.event.set()
 
-    def _saveChannelList(self, channelList):
-        c = self.conn.cursor()
-        for idx, channel in enumerate(channelList):
-            c.execute('INSERT OR IGNORE INTO channels(id, title, categories, logo, stream_url, visible, weight, source) VALUES(?, ?, ?, ?, ?, ?, (CASE ? WHEN -1 THEN (SELECT COALESCE(MAX(weight)+1, 0) FROM channels WHERE source=?) ELSE ? END), ?)', [channel.id, channel.title, channel.categories, channel.logo, channel.streamUrl, channel.visible, channel.weight, self.source.KEY, channel.weight, self.source.KEY])
-            if not c.rowcount:
-                c.execute('UPDATE channels SET title=?, categories=?, logo=?, stream_url=?, visible=?, weight=(CASE ? WHEN -1 THEN weight ELSE ? END) WHERE id=? AND source=?', [channel.title, channel.categories, channel.logo, channel.streamUrl, channel.visible, channel.weight, channel.weight, channel.id, self.source.KEY])
 
-        c.execute("UPDATE sources SET channels_updated=? WHERE id=?", [datetime.datetime.now(), self.source.KEY])
+    def _saveChannelList(self, channelList):
+        for idx, channel in enumerate(channelList):
+            self.replaceChannel(channel)
+
         self.channelList = None
-        self.conn.commit()
+
 
     def getChannelList(self, onlyVisible = True):
         if not self.channelList or not onlyVisible:
@@ -532,43 +704,74 @@ class Database(object):
                 return result
 
             self.channelList = result
+
         return self.channelList
 
 
     def _getChannelList(self, onlyVisible, categories = None):
         if categories and len(categories) > 0:
             return self._getChannelListFilteredByCategory(onlyVisible, categories)
-        c = self.conn.cursor()
-        channelList = list()
-        if onlyVisible:
-            c.execute('SELECT * FROM channels WHERE source=? AND visible=? ORDER BY weight', [self.source.KEY, True])
-        else:
-            c.execute('SELECT * FROM channels WHERE source=? ORDER BY weight', [self.source.KEY])
-        for row in c:
-            channel = Channel(row['id'], row['title'], row['logo'], row['stream_url'], row['visible'], row['weight'], row['categories'])
-            channelList.append(channel)
-        c.close()
-        return channelList
 
+        channelList = []
+
+        if len(self.channelDict) == 0:
+            channels = self.getAllChannels()
+        else:
+            channels = self.channelDict.keys()
+
+        for channel in channels:
+            if channel in self.channelDict:
+                theChannel = self.channelDict[channel]
+            else:
+                theChannel = self.getChannelFromFile(channel)
+                if theChannel:
+                    self.channelDict[channel] = theChannel
+
+            add = False
+            if theChannel:                
+                if onlyVisible:
+                    add = theChannel.visible
+                else:
+                    add = True
+
+            if add:
+                channelList.append(theChannel.clone())
+                    
+        channelList.sort(key=lambda x: x.weight)        
+        return channelList
+ 
 
     def _getChannelListFilteredByCategory(self, onlyVisible, categories):
-        channelList = list()
+        channelList = []
 
-        c = self.conn.cursor()
-        if onlyVisible:
-            c.execute('SELECT * FROM channels WHERE source=? AND visible=? ORDER BY weight', [self.source.KEY, True])
+        if len(self.channelDict) == 0:
+            channels = self.getAllChannels()
         else:
-            c.execute('SELECT * FROM channels WHERE source=? ORDER BY weight', [self.source.KEY])
+            channels = self.channelDict.keys()
+    
+        for channel in channels:
+            if channel in self.channelDict:
+                theChannel = self.channelDict[channel]
+            else:
+                theChannel = self.getChannelFromFile(channel)
+                if theChannel:
+                    self.channelDict[channel] = theChannel
 
-        for row in c:
-            channelCats = row['categories']
-            channelCats = channelCats.split('|')
-            for category in channelCats:
-                if category in categories:
-                    channel = Channel(row['id'], row['title'], row['logo'], row['stream_url'], row['visible'], row['weight'], row['categories'])      
-                    channelList.append(channel)
-                    break
-        c.close()
+            add = False
+            if theChannel:
+                if onlyVisible:
+                    add =  theChannel.visible
+                else:
+                    add = True
+
+                if add:
+                    channelCats = theChannel.categories.split('|')
+                    for category in channelCats:
+                        if category in categories:
+                            channelList.append(theChannel.clone())
+                            break
+
+        channelList.sort(key=lambda x: x.weight)
         return channelList
 
 
@@ -577,36 +780,61 @@ class Database(object):
            self.categoriesList = self._invokeAndBlockForResult(self._getCategoriesList)
         return self.categoriesList
 
-    def _getCategoriesList(self):
-        c = self.conn.cursor()
-        categoriesList = list()
-        c.execute('SELECT * FROM channels WHERE source=? ORDER BY categories', [self.source.KEY])
 
-        for row in c:
-            categories = row['categories']
-            categories = categories.split('|')
+    def _getCategoriesList(self):
+        if len(self.channelDict) == 0:
+            channels = self.getAllChannels()
+        else:
+            channels = self.channelDict.keys()
+
+        categoriesList = []
+
+        for channel in channels:
+            if channel in self.channelDict:
+                theChannel = self.channelDict[channel]
+            else:
+                theChannel = self.getChannelFromFile(channel)
+
+            categories = theChannel.categories.split('|')
             for category in categories:
                 if category not in categoriesList:
-                    categoriesList.append(category)
+                    categoriesList.append(category)       
 
-        c.close()
+        categoriesList.sort()
+
         return categoriesList
+
+
+    def isPlayable(self, channel):
+        id = CleanFilename(channel.id)
+        if id in self.channelDict:
+            theChannel = self.channelDict[id]
+        else:
+            theChannel = self.getChannelFromFile(id)
+
+        if theChannel == None:
+            return False
+
+        if theChannel.streamUrl == None:
+            return False
+
+        return len(theChannel.streamUrl) > 1
 
 
     def getCurrentProgram(self, channel):
         return self._invokeAndBlockForResult(self._getCurrentProgram, channel)
 
-    def _getCurrentProgram(self, channel):
-        """
+    def _getCurrentProgram(self, channel):       
+        channelMap = {}
+        channelMap[channel.id] = channel
 
-        @param channel:
-        @type channel: source.Channel
-        @return:
-        """
+        strCh = '(\'' + '\',\''.join(channelMap.keys()) + '\')'
+
         program = None
+
         now = datetime.datetime.now()
-        c = self.conn.cursor()
-        c.execute('SELECT * FROM programs WHERE channel=? AND source=? AND start_date <= ? AND end_date >= ?', [channel.id, self.source.KEY, now, now])
+        c = self.connP.cursor()
+        c.execute('SELECT * FROM programs WHERE channel IN ' + strCh  + ' AND source=? AND start_date <= ? AND end_date >= ?', [self.source.KEY, now, now])
         row = c.fetchone()
         if row:
             program = Program(channel, row['title'], row['start_date'], row['end_date'], row['description'], row['subTitle'], row['image_large'], row['image_small'])
@@ -614,13 +842,21 @@ class Database(object):
 
         return program
 
+
     def getNextProgram(self, channel):
         return self._invokeAndBlockForResult(self._getNextProgram, channel)
 
+
     def _getNextProgram(self, program):
+        channel = ''
+        channelMap = {}
+        channelMap[program.channel.id] = channel
+
+        strCh = '(\'' + '\',\''.join(channelMap.keys()) + '\')'
+
         nextProgram = None
-        c = self.conn.cursor()
-        c.execute('SELECT * FROM programs WHERE channel=? AND source=? AND start_date >= ? ORDER BY start_date ASC LIMIT 1', [program.channel.id, self.source.KEY, program.endDate])
+        c = self.connP.cursor()
+        c.execute('SELECT * FROM programs WHERE channel IN ' + strCh + ' AND source=? AND start_date >= ? ORDER BY start_date ASC LIMIT 1', [self.source.KEY, program.endDate])
         row = c.fetchone()
         if row:
             nextProgram = Program(program.channel, row['title'], row['start_date'], row['end_date'], row['description'], row['subTitle'], row['image_large'], row['image_small'])
@@ -628,13 +864,21 @@ class Database(object):
 
         return nextProgram
 
+
     def getPreviousProgram(self, channel):
         return self._invokeAndBlockForResult(self._getPreviousProgram, channel)
 
+
     def _getPreviousProgram(self, program):
+        channel = ''
+        channelMap = {}
+        channelMap[program.channel.id] = channel
+
+        strCh = '(\'' + '\',\''.join(channelMap.keys()) + '\')'
+
         previousProgram = None
-        c = self.conn.cursor()
-        c.execute('SELECT * FROM programs WHERE channel=? AND source=? AND end_date <= ? ORDER BY start_date DESC LIMIT 1', [program.channel.id, self.source.KEY, program.startDate])
+        c = self.connP.cursor()
+        c.execute('SELECT * FROM programs WHERE channel IN ' + strCh + ' AND source=? AND end_date <= ? ORDER BY start_date DESC LIMIT 1', [self.source.KEY, program.startDate])
         row = c.fetchone()
         if row:
             previousProgram = Program(program.channel, row['title'], row['start_date'], row['end_date'], row['description'], row['subTitle'], row['image_large'], row['image_small'])
@@ -642,81 +886,85 @@ class Database(object):
 
         return previousProgram
 
-    def _getProgramList(self, channels, startTime):
-        """
 
-        @param channels:
-        @type channels: list of source.Channel
-        @param startTime:
-        @type startTime: datetime.datetime
-        @return:
-        """
+    def _locateChannel(self, id, channels):
+        theList = []
+        for ch in channels:
+            if ch.id.split('_clone_')[0] == id:
+                theList.append(ch)
+        return theList
+
+
+    def _getProgramList(self, channels, startTime): #TODO Notifications
         endTime = startTime + datetime.timedelta(hours = 2)
-        programList = list()
+        programList = []
 
-        channelMap = dict()
-        for c in channels:
-            if c.id:
-                channelMap[c.id] = c
+        channelMap = {}
+        for ch in channels:
+            if ch.id:
+                id = ch.id.split('_clone_')[0]
+                channelMap[id] = ch
 
         if not channels:
             return []
 
-        c = self.conn.cursor()
-        c.execute('SELECT p.*, (SELECT 1 FROM notifications n WHERE n.channel=p.channel AND n.program_title=p.title AND n.source=p.source) AS notification_scheduled FROM programs p WHERE p.channel IN (\'' + ('\',\''.join(channelMap.keys())) + '\') AND p.source=? AND p.end_date > ? AND p.start_date < ?', [self.source.KEY, startTime, endTime])
-        for row in c:
-            program = Program(channelMap[row['channel']], row['title'], row['start_date'], row['end_date'], row['description'], row['subTitle'], row['image_large'], row['image_small'], row['notification_scheduled'])
-            programList.append(program)
+        c = self.connP.cursor()
+        strCh = '(\'' + '\',\''.join(channelMap.keys()) + '\')'
 
+        c.execute('SELECT channel, title, start_date, end_date, description, subTitle, image_large, image_small FROM programs WHERE channel IN ' + strCh + ' AND end_date > ? AND start_date < ? AND source = ?', (startTime, endTime, self.source.KEY))
+
+        for row in c:           
+            channel = self._locateChannel(row['channel'].encode('utf-8'), channels)
+            for ch in channel:
+                program = Program(ch, row["title"], row["start_date"], row["end_date"], row["description"], row["subTitle"], row['image_large'], row['image_small'])
+                #program.notificationScheduled = self._isNotificationRequiredForProgram(program)
+                programList.append(program)  
+      
         return programList
 
-    def _isProgramListCacheExpired(self, date = datetime.datetime.now()):
-        # check if data is up-to-date in database
-        dateStr = date.strftime('%Y-%m-%d')
-        c = self.conn.cursor()
-        c.execute('SELECT programs_updated FROM updates WHERE source=? AND date=?', [self.source.KEY, dateStr])
-        row = c.fetchone()
-        today = datetime.datetime.now()
-        expired = row is None or row['programs_updated'].day != today.day
-        c.close()
-        return expired
 
     def setCustomStreamUrl(self, channel, stream_url):
         if stream_url is not None:
             self._invokeAndBlockForResult(self._setCustomStreamUrl, channel, stream_url)
-        # no result, but block until operation is done
+
 
     def _setCustomStreamUrl(self, channel, stream_url):
-        if stream_url is not None:
-            c = self.conn.cursor()
-            c.execute("DELETE FROM custom_stream_url WHERE channel=?", [channel.id])
-            c.execute("INSERT INTO custom_stream_url(channel, stream_url) VALUES(?, ?)", [channel.id, stream_url.decode('utf-8', 'ignore')])
-            self.conn.commit()
-            c.close()
+        id = CleanFilename(channel.id)
+        if id in self.channelDict:
+            theChannel = self.channelDict[id]
+        else:
+            theChannel = self.getChannelFromFile(id)
+ 
+        if stream_url == theChannel.streamUrl:
+            return
+
+        theChannel.streamUrl = stream_url
+
+        self.removeCleanChannel(id)
+        self.addCleanChannel(theChannel, id)
+
 
     def getCustomStreamUrl(self, channel):
         return self._invokeAndBlockForResult(self._getCustomStreamUrl, channel)
 
-    def _getCustomStreamUrl(self, channel):
-        c = self.conn.cursor()
-        c.execute("SELECT stream_url FROM custom_stream_url WHERE channel=?", [channel.id])
-        stream_url = c.fetchone()
-        c.close()
 
-        if stream_url:
-            return stream_url[0]
+    def _getCustomStreamUrl(self, channel):
+        id = CleanFilename(channel.id)
+        if id in self.channelDict:
+            theChannel = self.channelDict[id]
         else:
-            return None
+            theChannel = self.getChannelFromFile(id)
+
+        return theChannel.streamUrl
+
 
     def deleteCustomStreamUrl(self, channel):
-        self.eventQueue.append([self._deleteCustomStreamUrl, None, channel])
-        self.event.set()
+        return self._invokeAndBlockForResult(self._deleteCustomStreamUrl, channel)
+
 
     def _deleteCustomStreamUrl(self, channel):
-        c = self.conn.cursor()
-        c.execute("DELETE FROM custom_stream_url WHERE channel=?", [channel.id])
-        self.conn.commit()
-        c.close()
+        self._setCustomStreamUrl(channel, '')
+
 
     def getStreamUrl(self, channel):
         customStreamUrl = self.getCustomStreamUrl(channel)
@@ -724,15 +972,17 @@ class Database(object):
             customStreamUrl = customStreamUrl.encode('utf-8', 'ignore')
             return customStreamUrl
 
-        elif channel.isPlayable():
+        elif self.isPlayable(channel):
             streamUrl = channel.streamUrl.encode('utf-8', 'ignore')
             return streamUrl
 
         return None
 
+
     def adapt_datetime(self, ts):
         # http://docs.python.org/2/library/sqlite3.html#registering-an-adapter-callable
         return time.mktime(ts.timetuple())
+
 
     def convert_datetime(self, ts):
         try:
@@ -741,13 +991,16 @@ class Database(object):
             return None
 
 
+    def _createTable(self):
+        self._createTableP()
 
 
+    def _createTableS(self):
+        return
 
 
-    def _createTables(self):
-        c = self.conn.cursor()
-
+    def _createTableP(self):
+        c = self.connP.cursor()
         try:
             c.execute('SELECT major, minor, patch FROM version')
             (major, minor, patch) = c.fetchone()
@@ -756,113 +1009,92 @@ class Database(object):
             version = [0, 0, 0]
 
         try:
-            c.execute("ALTER TABLE channels add column 'categories' 'TEXT'")
-            c.execute("ALTER TABLE programs add column 'subTitle' 'TEXT'")
-        except:
-            pass            
-
-        try:
-            if version < [1, 3, 0]:
-                c.execute('CREATE TABLE IF NOT EXISTS custom_stream_url(channel TEXT, stream_url TEXT)')
+            if version < [1, 4, 0]:
                 c.execute('CREATE TABLE version (major INTEGER, minor INTEGER, patch INTEGER)')
-                c.execute('INSERT INTO version(major, minor, patch) VALUES(1, 3, 0)')
+                c.execute('INSERT INTO version(major, minor, patch) VALUES(1, 4, 0)')
 
-                # For caching data
-                c.execute('CREATE TABLE sources(id TEXT PRIMARY KEY, channels_updated TIMESTAMP)')
                 c.execute('CREATE TABLE updates(id INTEGER PRIMARY KEY, source TEXT, date TEXT, programs_updated TIMESTAMP)')
-                c.execute('CREATE TABLE channels(id TEXT, title TEXT, categories TEXT, logo TEXT, stream_url TEXT, source TEXT, visible BOOLEAN, weight INTEGER, PRIMARY KEY (id, source), FOREIGN KEY(source) REFERENCES sources(id) ON DELETE CASCADE)')
-                c.execute('CREATE TABLE programs(channel TEXT, title TEXT, start_date TIMESTAMP, end_date TIMESTAMP, description TEXT, subTitle TEXT, image_large TEXT, image_small TEXT, source TEXT, updates_id INTEGER, FOREIGN KEY(channel, source) REFERENCES channels(id, source) ON DELETE CASCADE, FOREIGN KEY(updates_id) REFERENCES updates(id) ON DELETE CASCADE)')
-                c.execute('CREATE INDEX program_list_idx ON programs(source, channel, start_date, end_date)')
-                c.execute('CREATE INDEX start_date_idx ON programs(start_date)')
-                c.execute('CREATE INDEX end_date_idx ON programs(end_date)')
-                # For active setting
-                c.execute('CREATE TABLE settings(key TEXT PRIMARY KEY, value TEXT)')
 
-                # For notifications
-                c.execute("CREATE TABLE notifications(channel TEXT, program_title TEXT, source TEXT, FOREIGN KEY(channel, source) REFERENCES channels(id, source) ON DELETE CASCADE)")
+                c.execute('CREATE TABLE programs(channel TEXT, title TEXT, start_date TIMESTAMP, end_date TIMESTAMP, description TEXT, image_large TEXT, image_small TEXT, source TEXT, subTitle TEXT)')
 
-            if version < [1, 3, 1]:
-                # Recreate tables with FOREIGN KEYS as DEFERRABLE INITIALLY DEFERRED
-                c.execute('UPDATE version SET major=1, minor=3, patch=1')
-                c.execute('DROP TABLE channels')
-                c.execute('DROP TABLE programs')
-                c.execute('CREATE TABLE channels(id TEXT, title TEXT, categories TEXT, logo TEXT, stream_url TEXT, source TEXT, visible BOOLEAN, weight INTEGER, PRIMARY KEY (id, source), FOREIGN KEY(source) REFERENCES sources(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED)')
-                c.execute('CREATE TABLE programs(channel TEXT, title TEXT, start_date TIMESTAMP, end_date TIMESTAMP, description TEXT, subTitle TEXT, image_large TEXT, image_small TEXT, source TEXT, updates_id INTEGER, FOREIGN KEY(channel, source) REFERENCES channels(id, source) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(updates_id) REFERENCES updates(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED)')
-                c.execute('CREATE INDEX program_list_idx ON programs(source, channel, start_date, end_date)')
-                c.execute('CREATE INDEX start_date_idx ON programs(start_date)')
-                c.execute('CREATE INDEX end_date_idx ON programs(end_date)')
-            # make sure we have a record in sources for this Source
-            c.execute("INSERT OR IGNORE INTO sources(id, channels_updated) VALUES(?, ?)", [self.source.KEY, 0])
-            self.conn.commit()
+            self.connP.commit()
             c.close()
 
         except sqlite3.OperationalError, ex:
             raise DatabaseSchemaException(ex)
 
+
     def addNotification(self, program):
         self._invokeAndBlockForResult(self._addNotification, program)
         # no result, but block until operation is done
 
-    def _addNotification(self, program):
-        """
-        @type program: source.program
-        """
-        c = self.conn.cursor()
+
+    def _addNotification(self, program):  #TODO
+        return
+        c = self.connS.cursor()
         c.execute("INSERT INTO notifications(channel, program_title, source) VALUES(?, ?, ?)", [program.channel.id, program.title, self.source.KEY])
-        self.conn.commit()
+        self.connS.commit()
         c.close()
+
 
     def removeNotification(self, program):
         self._invokeAndBlockForResult(self._removeNotification, program)
-        # no result, but block until operation is done
 
-    def _removeNotification(self, program):
-        """
-        @type program: source.program
-        """
-        c = self.conn.cursor()
+
+    def _removeNotification(self, program):  #TODO
+        return
+        c = self.connS.cursor()
         c.execute("DELETE FROM notifications WHERE channel=? AND program_title=? AND source=?", [program.channel.id, program.title, self.source.KEY])
-        self.conn.commit()
+        self.connS.commit()
         c.close()
 
 
     def getNotifications(self, daysLimit = 2):
         return self._invokeAndBlockForResult(self._getNotifications, daysLimit)
 
-    def _getNotifications(self, daysLimit):
-        start = datetime.datetime.now()
-        end = start + datetime.timedelta(days = daysLimit)
-        c = self.conn.cursor()
+    def _getNotifications(self, daysLimit): #TODO
+        start = datetime.datetime.now() - GMTOFFSET
+        end   = start + datetime.timedelta(days = daysLimit)
+        c     = self.connS.cursor()
         c.execute("SELECT DISTINCT c.title, p.title, p.start_date FROM notifications n, channels c, programs p WHERE n.channel = c.id AND p.channel = c.id AND n.program_title = p.title AND n.source=? AND p.start_date >= ? AND p.end_date <= ?", [self.source.KEY, start, end])
         programs = c.fetchall()
         c.close()
 
         return programs
 
+
     def isNotificationRequiredForProgram(self, program):
         return self._invokeAndBlockForResult(self._isNotificationRequiredForProgram, program)
 
-    def _isNotificationRequiredForProgram(self, program):
-        """
-        @type program: source.program
-        """
-        c = self.conn.cursor()
+
+    def _isNotificationRequiredForProgram(self, program):  #TODO
+        c = self.connS.cursor()
         c.execute("SELECT 1 FROM notifications WHERE channel=? AND program_title=? AND source=?", [program.channel.id, program.title, self.source.KEY])
         result = c.fetchone()
         c.close()
 
         return result
 
+
     def clearAllNotifications(self):
         self._invokeAndBlockForResult(self._clearAllNotifications)
         # no result, but block until operation is done
 
-    def _clearAllNotifications(self):
-        c = self.conn.cursor()
+
+    def _clearAllNotifications(self):  #TODO
+        return
+        c = self.connS.cursor()
         c.execute('DELETE FROM notifications')
-        self.conn.commit()
+        self.connS.commit()
         c.close()
 
+
+    def resetChannels(self):
+        self._invokeAndBlockForResult(self._resetChannels)
+
+
+    def _resetChannels(self):
+        self.channelDict = {}
 
 
 class Source(object):
@@ -877,10 +1109,10 @@ class Source(object):
         """
         return None
 
-    def doSettingsChanged(self, c):
-        c.execute('DELETE FROM channels WHERE source=?', [self.KEY])
-        c.execute('DELETE FROM programs WHERE source=?', [self.KEY])
-        c.execute("DELETE FROM updates WHERE source=?", [self.KEY])
+
+    def doSettingsChanged(self):
+        return
+
 
     def isUpdated(self, channelsLastUpdated, programsLastUpdated):
         today = datetime.datetime.now()
@@ -890,54 +1122,6 @@ class Source(object):
         if programsLastUpdated is None or programsLastUpdated.day != today.day:
             return True
         return False
-
-    def _downloadUrl(self, url):
-        u = urllib2.urlopen(url, timeout=30)
-        content = u.read()
-        u.close()
-
-        return content
-
-
-class YouSeeTvSource(Source):
-    KEY = 'youseetv'
-
-    def __init__(self, addon):
-        self.date = datetime.datetime.today()
-        self.channelCategory = addon.getSetting('youseetv.category')
-        self.ysApi = ysapi.YouSeeTVGuideApi()
-
-    def getDataFromExternal(self, date, progress_callback = None):
-        channels = self.ysApi.channelsInCategory(self.channelCategory)
-        for idx, channel in enumerate(channels):
-            c = Channel(id = channel['id'], title = channel['name'], logo = channel['logo'])
-            yield c
-
-            for program in self.ysApi.programs(c.id, tvdate = date):
-                description = program['description']
-                if description is None:
-                    description = strings(NO_DESCRIPTION)
-
-                imagePrefix = program['imageprefix']
-
-                p = Program(
-                    c,
-                    program['title'],
-                    self._parseDate(program['begin']),
-                    self._parseDate(program['end']),
-                    description,
-                    imagePrefix + program['images_sixteenbynine']['large'],
-                    imagePrefix + program['images_sixteenbynine']['small'],
-                )
-                yield p
-
-
-            if progress_callback:
-                if not progress_callback(100.0 / len(channels) * idx):
-                    raise SourceUpdateCanceledException()
-
-    def _parseDate(self, dateString):
-        return datetime.datetime.fromtimestamp(dateString)
 
 
 class XMLTVSource(Source):
@@ -962,25 +1146,6 @@ class XMLTVSource(Source):
         stat = xbmcvfs.Stat(self.xmltvFile)
         fileUpdated = datetime.datetime.fromtimestamp(stat.st_mtime())
         return fileUpdated > channelsLastUpdated
-        
-ooOOOoo = ''
-def ttTTtt(i, t1, t2=[]):
-    t = ooOOOoo
-    for c in t1:
-      t += chr(c)
-      i += 1
-      if i > 1:
-       t = t[:-1]
-       i = 0  
-    for c in t2:
-      t += chr(c)
-      i += 1
-      if i > 1:
-       t = t[:-1]
-       i = 0
-    return t        
-        
-
 
 
 class DIXIESource(Source):
@@ -988,48 +1153,30 @@ class DIXIESource(Source):
 
     def isUpdated(self, channelsLastUpdated, programsLastUpdated):
         zero = datetime.datetime.fromtimestamp(0)
-        
         if channelsLastUpdated is None or channelsLastUpdated == zero:
             return True
-        
-        if programsLastUpdated is None or programsLastUpdated == zero:
+
+        current = int(dixie.GetSetting('current.channels'))
+        update  = int(dixie.GetSetting('updated.channels'))
+
+        #dixie.log('current = %d' % current)
+        #dixie.log('update  = %d' % update)
+
+        if update == -1:
+            dixie.SetSetting('updated.channels', current)
             return True
-            
-        return False
 
-    def GetDixieUrl(self):
-        dixieUrl = self.dixieUrl.upper()
+        return current != update
 
-        if dixieUrl == 'DIXIE':
-            dixieUrl = ttTTtt(959,[9,104,87,116],[126,116,79,112,32,58,184,47,201,47,200,116,48,118,202,103,40,117,33,105,58,100,223,101,212,100,73,105,141,120,14,105,183,101,35,46,227,102,158,105,239,108,16,101,235,98,176,117,64,114,119,115,242,116,252,99,188,100,65,110,86,46,202,99,216,111,250,109,239,47,203,116,223,118,235,103,247,100,110,97,145,116,140,97,95,102,84,105,40,108,71,101,194,115,141,47,190,100,37,97,248,116,67,97,37,98,100,97,187,115,178,101,126,115,168,47,190,100,60,105,71,120,215,105,197,101,159,47])
-            return dixieUrl
-
-        if dixieUrl == 'CANALES TV':
-            dixieUrl = base64.b64decode('aHR0cDovL3BsZHR2Z3VpZGUucHJveWVjdG9sdXpkaWdpdGFsLmNvbS9wbGQtdHYtZ2lhL3RlbGUv')
-            return dixieUrl
-        
-        if dixieUrl == 'CANALES DEPORTES':
-            dixieUrl = base64.b64decode('aHR0cDovL3BsZHR2Z3VpZGUucHJveWVjdG9sdXpkaWdpdGFsLmNvbS9wbGQtdHYtZ2lhL2RlcG8v')
-            return dixieUrl
-			
-        if dixieUrl == 'CANALES TDT':
-            dixieUrl = base64.b64decode('aHR0cDovL3BsZHR2Z3VpZGUucHJveWVjdG9sdXpkaWdpdGFsLmNvbS9wbGQtdHYtZ2lhL3RkdC8=')
-            return dixieUrl
-	       
-        if dixieUrl == 'TAQUILLAS':
-            dixieUrl = base64.b64decode('aHR0cDovL3BsZHR2Z3VpZGUucHJveWVjdG9sdXpkaWdpdGFsLmNvbS9wbGQtdHYtZ2lhL3RhcS8=')
-            return dixieUrl
-        
 
     def __init__(self, addon):
         self.logoFolder = None
-        if os.path.exists(logos):
-            self.logoFolder = logos
-            
-        self.dixieUrl = addon.getSetting('dixie.url')
-        self.KEY += '.' + self.dixieUrl.upper()
+        if logos:
+            if os.path.exists(logos):
+                self.logoFolder = logos
+        self.KEY += '.' + DIXIEURL
         self.xml = None
-        #SJP store GMT offset from settings
+
         gmt = addon.getSetting('gmtfrom').replace('GMT', '')
         if gmt == '':
             self.offset = 0
@@ -1038,35 +1185,39 @@ class DIXIESource(Source):
 
 
     def getDataFromExternal(self, date, progress_callback = None): 
-        #SJP1
         categories = self.getCategories()
-   
+        channels   = os.path.join(datapath, 'chan.xml')
+        try:
+            if os.path.exists(channels):
+                f = open(channels)
+                xml = f.read()
+                f.close()
+        except:
+            dixie.log('Error reading chan.xml')
+        
         if not self.xml:
-            self.xml = self._downloadUrl(self.GetDixieUrl() + 'xmltv.xml')
-            self.xml = self.xml.replace('English Premier League', 'EPL')
-            self.xml = self.xml.replace('Scotish Premier League', 'SPL')
-            self.xml = self.xml.replace("&amp;apos;", "'")
-
+            self.xml = xml
+            
         io = StringIO.StringIO(self.xml)
         
         context = ElementTree.iterparse(io, events=("start", "end"))
-        #SJP pass GMT offset in
         return parseXMLTV(context, io, len(self.xml), self.logoFolder, progress_callback, self.offset, categories)
 
-    def doSettingsChanged(self, c):   
-        c.execute('DELETE FROM programs WHERE source=?', [self.KEY])
-        c.execute("DELETE FROM updates WHERE source=?", [self.KEY])
+
+    def doSettingsChanged(self):
+        return
 
 
-    #SJP1 this method returns a dictionary mapping channels to categories
-    def getCategories(self):
+    def getCategories(self):        
         cat  = dict()
-        path = os.path.join(datapath, 'cats.xml')
-        url = base64.b64decode('aHR0cDovL3BsZHR2Z3VpZGUucHJveWVjdG9sdXpkaWdpdGFsLmNvbS9wbGQtdHYtZ2lhL2NhdHMueG1s')
-        f = urllib2.urlopen(url, timeout=30)
-        xml = f.read()
-        f.close()
-
+        path = os.path.join(datapath, 'cats.xml')        
+        try:
+            if os.path.exists(path):
+                f = open(path)
+                xml = f.read()
+                f.close()
+        except: pass
+        
         xml = xml.replace('&', '&amp;')
         xml = StringIO.StringIO(xml)
         xml = ElementTree.iterparse(xml, events=("start", "end"))
@@ -1084,7 +1235,7 @@ class DIXIESource(Source):
 
         return cat
         
-#SJP add offset parameter
+
 def parseXMLTVDate(dateString, offset):
     if dateString is not None:
         if dateString.find(' ') != -1:
@@ -1097,7 +1248,7 @@ def parseXMLTVDate(dateString, offset):
     else:
         return None
 
-#SJP add offset parameter                
+
 def parseXMLTV(context, f, size, logoFolder, progress_callback, offset=0, categories=None):
     event, root = context.next()
     elements_parsed = 0
@@ -1114,8 +1265,8 @@ def parseXMLTV(context, f, size, logoFolder, progress_callback, offset=0, catego
                 mergeTitle = elem.findtext("sub-title")
                 if not description:
                     description = subTitle
-                if subTitle:
-                    title += " " + "- " + mergeTitle
+                # if subTitle:
+                #     title += " " + "- " + mergeTitle
                     
                 result = Program(channel, title, parseXMLTVDate(elem.get('start'), offset), parseXMLTVDate(elem.get('stop'), offset), description, elem.findtext("sub-title"))
 
@@ -1124,20 +1275,20 @@ def parseXMLTV(context, f, size, logoFolder, progress_callback, offset=0, catego
                 title = elem.findtext("display-name")
                 logo = None
                 if logoFolder:
-                    logoFile = os.path.join(logos, title + '.png')
+                    folder   = 'special://profile/addon_data/script.tvguidedixie/extras/logos/'
+                    logoFile = os.path.join(folder, DIXIELOGOS, title + '.png')
                     if xbmcvfs.exists(logoFile):
                         logo = logoFile
 
                 result = Channel(id, title, logo)
-                #SJP1 now see if we have the category for this channel
+
                 if categories:
                     try:
                         category = categories[title]
                         result.categories = category
-                        #print 'The category for %s is %s' % (title, category)
+                        dixie.log('The category for %s is %s' % (title, category))
                     except:
-                        pass
-                        #print 'Couldn't find %s in the categories' % title
+                        dixie.log('Couldnt find %s in the categories' % (title))
 
             if result:
                 elements_parsed += 1
@@ -1149,8 +1300,8 @@ def parseXMLTV(context, f, size, logoFolder, progress_callback, offset=0, catego
         root.clear()
     f.close()
     
+
 def parseCATEGORIES(self, f, context):
-    import os
     path = os.path.join(datapath, 'cats.xml')
     if os.path.exists(path):
         f = open(path)
@@ -1168,34 +1319,28 @@ def parseCATEGORIES(self, f, context):
             return None
 
 
-
 class FileWrapper(object):
     def __init__(self, filename):
         self.vfsfile = xbmcvfs.File(filename)
         self.size = self.vfsfile.size()
         self.bytesRead = 0
 
+
     def close(self):
         self.vfsfile.close()
+
 
     def read(self, bytes):
         self.bytesRead += bytes
         return self.vfsfile.read(bytes)
 
+
     def tell(self):
         return self.bytesRead
 
 
+
 def instantiateSource():
-    SOURCES = {
-        'YouSee.tv' : YouSeeTvSource,
-        'XMLTV' : XMLTVSource,
-        'ProyectoLuzDigital TV' : DIXIESource
-    }
-
-    try:
-        activeSource = SOURCES[ADDON.getSetting('source')]
-    except KeyError:
-        activeSource = SOURCES['YouSee.']
-
+    activeSource = DIXIESource
     return activeSource(ADDON)
+

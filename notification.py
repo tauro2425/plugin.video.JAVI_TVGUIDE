@@ -38,12 +38,12 @@ class Notification(object):
         return 'tvguide-%s-%s' % (programTitle, startTime)
 
     def scheduleNotifications(self):
-        xbmc.log("[script.tvguidemicro] Scheduling notifications")
+        xbmc.log("[script.tvguidedixie] Scheduling notifications")
         for channelTitle, programTitle, startTime in self.database.getNotifications():
             self._scheduleNotification(channelTitle, programTitle, startTime)
 
     def _scheduleNotification(self, channelTitle, programTitle, startTime):
-        t = startTime - datetime.datetime.now()
+        t = startTime - datetime.datetime.now() + src.GMTOFFSET
         timeToNotification = ((t.days * 86400) + t.seconds) / 60
         if timeToNotification < 0:
             return
