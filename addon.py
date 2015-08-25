@@ -29,8 +29,8 @@ xbmc.Player().stop
 
 ADDON       = xbmcaddon.Addon(id = 'script.tvguidemicro')
 HOME        = ADDON.getAddonInfo('path')
-TITLE       = 'JAVI TVGUIDE'
-VERSION     = '1.0.0'
+TITLE       = 'DLP TV Guide'
+VERSION     = '2.0.6'
 addon       = xbmcaddon.Addon()
 addonid     = addon.getAddonInfo('id')
 versioninfo = addon.getAddonInfo('version')
@@ -43,7 +43,7 @@ cats        = ADDON.getSetting('categories')
 oss         = 'OffSide Streams'
 stvb        = 'StreamTVBox'
 
-print '****** JAVI TVGUIDE INFORMACION ******'
+print '****** DLP TV GUIDE INFORMATION ******'
 print addonid, versioninfo
 
 
@@ -54,9 +54,9 @@ def CheckVersion():
     if prev == curr:
         return
 
-    if prev == '1.0.0':
+    if prev == '2.0.5':
         d = xbmcgui.Dialog()
-        d.ok(TITLE + ' - ' + VERSION, 'PARA ALGUN PROBLEMA O SUGERENCIA ENVIENME UN MAIL'
+        d.ok(TITLE + ' - ' + VERSION, 'Para mas Informacion y soporte Aqui' , '[COLOR FF00FF00]        http://proyectoluzdigital@proyectoluzdigital.com/[/COLOR]  para un mejor mantenimiento del foro','Por favor pinchen en el FLOTADOR del foro Gracias')
 
     ADDON.setSetting('VERSION', curr)
 
@@ -112,7 +112,7 @@ import buggalo
 import gui
 
 
-
+buggalo.GMAIL_RECIPIENT = 'http://proyectoluzdigital@proyectoluzdigital.com/'
 
 
 try:

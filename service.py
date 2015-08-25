@@ -1,5 +1,6 @@
 #
-#      Copyright (C) 2014 Sean Poyser
+#      Copyright (C) 2012 Tommy Winther
+#      http://tommy.winther.nu
 #
 #  This Program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -12,86 +13,45 @@
 #  GNU General Public License for more details.
 #
 #  You should have received a copy of the GNU General Public License
-#  along with XBMC; see the file COPYING.  If not, write to
+#  along with this Program; see the file LICENSE.txt.  If not, write to
 #  the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
 #  http://www.gnu.org/copyleft/gpl.html
 #
-
-
 import xbmcaddon
 import notification
 import xbmc
-import os
 import source
-import dixie
-
-ID    = 'script.tvguidedixie'
-ADDON = xbmcaddon.Addon(id = ID)
-
-datapath   = xbmc.translatePath(ADDON.getAddonInfo('profile'))
-cookiepath = os.path.join(datapath, 'cookies')
-cookiefile = os.path.join(cookiepath, 'cookie')
-
-if not os.path.exists(cookiepath):
-    os.makedirs(cookiepath)
-
-
-dst = os.path.join(xbmc.translatePath('special://userdata/keymaps'), 'zOTT.xml')
-
-if os.path.exists(dst):
-   os.remove(dst)
-   xbmc.sleep(1000)
-   xbmc.executebuiltin('Action(reloadkeymaps)')
-
-
-import update
-update.checkForUpdate(silent = True)
 
 
 class Service(object):
     def __init__(self):
-        self.database = source.Database(self)
-        self.database.initializeS(self.onInitS)
-        
+        self.database = source.Database()
+        self.database.initialize(self.onInit)
 
-
-    def onInitS(self, success):
-        if success:
-            self.database.initializeP(self.onInitP)
-        else:
-            self.database.close()
-
-
-    def onInitP(self, success):
+    def onInit(self, success):
         if success:
             self.database.updateChannelAndProgramListCaches(self.onCachesUpdated)
         else:
             self.database.close()
 
-
     def onCachesUpdated(self):
+
         if ADDON.getSetting('notifications.enabled') == 'true':
             n = notification.Notification(self.database, ADDON.getAddonInfo('path'))
             n.scheduleNotifications()
+
         self.database.close(None)
 
-
-
 try:
-    #if ADDON.getSetting('cache.data.on.xbmc.startup') == 'true':
-    #    Service()
-    # Service()
-    pass
-
+    ADDON = xbmcaddon.Addon(id = 'script.tvguidemicro')
+    if ADDON.getSetting('cache.data.on.xbmc.startup') == 'true':
+        Service()
 except source.SourceNotConfiguredException:
-    pass
-
+    pass  # ignore
 except Exception, ex:
-    #xbmc.log('[script.tvguidedixie] Uncaught exception in service.py: %s' % str(ex) , xbmc.LOGDEBUG)
-    xbmc.log('[script.tvguidedixie] Uncaught exception in service.py: %s' % str(ex))
+    xbmc.log('[script.tvguidemicro] Uncaugt exception in service.py: %s' % str(ex) , xbmc.LOGDEBUG)
 
-
-
+ADDON = xbmcaddon.Addon(id = 'script.tvguidemicro')
 if ADDON.getSetting('autoStart') == "true":
     try:
         #workaround Python bug in strptime which causes it to intermittently throws an AttributeError
@@ -99,42 +59,4 @@ if ADDON.getSetting('autoStart') == "true":
         datetime.datetime.fromtimestamp(time.mktime(time.strptime('2013-01-01 19:30:00'.encode('utf-8', 'replace'), "%Y-%m-%d %H:%M:%S")))
     except:
         pass
-    xbmc.executebuiltin('RunScript(%s)' % ID)
-
-
-class MyMonitor(xbmc.Monitor):
-    def __init__(self):
-        xbmc.Monitor.__init__(self)
-
-
-    def onSettingsChanged(self):
-        self.tidySettings()
-
-
-    def tidySettings(self):
-        files = []
-        for i in range(10):
-            enabled = dixie.GetSetting('INI_%d_E' % i) == 'true'
-            if enabled:
-                file = dixie.GetSetting('INI_%d' % i)
-                files.append(file)
-
-        print files
-        
-        index = 0
-
-        for file in files:
-            if len(file) > 0:
-                dixie.SetSetting('INI_%d'   % index, file)
-                dixie.SetSetting('INI_%d_E' % index, 'true')
-                index += 1
-
-        for i in range(index, 10):
-            dixie.SetSetting('INI_%d'   % i, '')
-            dixie.SetSetting('INI_%d_E' % index, 'false')
-
-
-monitor = MyMonitor()
-monitor.tidySettings()
-while (not xbmc.abortRequested):
-    xbmc.sleep(1000)
+    xbmc.executebuiltin('RunScript(%s)' % 'script.tvguidemicro')

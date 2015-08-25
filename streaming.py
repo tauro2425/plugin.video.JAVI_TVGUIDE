@@ -1,5 +1,6 @@
 #
-#      Copyright (C) 2014 Sean Poyser and Richard Dean (write2dixie@gmail.com) - With acknowledgement to some original code by twinther (Tommy Winther)
+#      Copyright (C) 2012 Tommy Winther
+#      http://tommy.winther.nu
 #
 #  This Program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -12,67 +13,61 @@
 #  GNU General Public License for more details.
 #
 #  You should have received a copy of the GNU General Public License
-#  along with XBMC; see the file COPYING.  If not, write to
+#  along with this Program; see the file LICENSE.txt.  If not, write to
 #  the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
 #  http://www.gnu.org/copyleft/gpl.html
 #
-
-
-
 import xbmc
 from xml.etree import ElementTree
 from xml.parsers.expat import ExpatError
 import ConfigParser
 import os
-import re
 import xbmcaddon
-import urllib
 
-import dixie
-
-ADDON    = dixie.ADDON
-LOCAL    = dixie.GetSetting('local.ini') == 'true'
-FTVINI   = dixie.GetSetting('ftv.ini')
-datapath = dixie.PROFILE
+ADDON       = xbmcaddon.Addon(id = 'script.tvguidemicro')
+LOCAL       = (ADDON.getSetting('local.ini') == 'true')
+datapath    = xbmc.translatePath(ADDON.getAddonInfo('profile'))
 
 class StreamsService(object):
     def __init__(self):
-
+        path  = os.path.join(datapath, 'addons.ini')
+        local = os.path.join(datapath, 'local.ini')
         self.addonsParser = ConfigParser.ConfigParser(dict_type=OrderedDict)
         self.addonsParser.optionxform = lambda option: option
-
-        iniFiles = self.getIniFiles()
-
-        for file in iniFiles:
-            try:    self.addonsParser.read(file)
-            except: pass
         
-
-    def getIniFiles(self):
-        files = []
-
-        import glob
-        ini   = os.path.join(datapath, 'ini', '*.*')
-        files = glob.glob(ini)
-        
-        for i in range(10):
-            file = dixie.GetSetting('INI_%d' % i)
-            if len(file) > 0:
-                if file not in files:
-                    files.append(file)
-
-        files.append(os.path.join(datapath, 'addons.ini'))
-        
-        if LOCAL:
-            files.append(os.path.join(datapath, 'local.ini'))
-
-        if FTVINI == 'UK Links':
-            files.append(os.path.join(datapath, 'uk.ini'))
+        if not LOCAL:
+            try:
+                self.addonsParser.read(path)
+            except:
+                print 'unable to parse addons.ini'
         else:
-            files.append(os.path.join(datapath, 'nongeo.ini'))
+            try:
+                self.addonsParser.read(path)
+                self.addonsParser.read(local)
+                self.addonsParser.append(path)
+            except:
+                print 'unable to parse local.ini and addons.ini'
+            
 
-        return files
-        
+        self.loadMashup()
+
+    def loadMashup(self):
+        Dixie = os.path.join(xbmc.translatePath('special://profile/addon_data/plugin.video.movie25/Dixie'))
+        mashfile = os.path.join(Dixie,'mashup.ini')
+        if os.path.exists(mashfile):
+            os.remove(mashfile)
+        for path, subdirs, files in os.walk(Dixie):
+            for filename in files:
+                with open(Dixie+'/'+filename) as infile:
+                    for line in infile:
+                        open(mashfile,'a').write(line)
+        self.mashupParser = ConfigParser.ConfigParser(dict_type=OrderedDict)
+        self.mashupParser.optionxform = lambda option: option
+        try:
+            self.mashupParser.read(mashfile)
+        except:
+            print 'unable to parse mashup.ini'
+
 
     def loadFavourites(self):
         entries = list()
@@ -86,18 +81,13 @@ class StreamsService(object):
                 doc = ElementTree.fromstring(xml)
                 for node in doc.findall('favourite'):
                     value = node.text
-                    value = node.text.replace(',return','')
                     if value[0:11] == 'PlayMedia("':
                         value = value[11:-2]
                     elif value[0:10] == 'PlayMedia(':
                         value = value[10:-1]
                     elif value[0:22] == 'ActivateWindow(10025,"':
                         value = value[22:-2]
-                    elif value[0:21] == 'ActivateWindow(10025,':
-                        value = value[22:-1]
-                    elif value[0:22] == 'ActivateWindow(10001,"':
-                        value = value[22:-2]
-                    elif value[0:21] == 'ActivateWindow(10001,':
+                    elif value[0:21] == 'ActivateWindow(10025,"':
                         value = value[22:-1]
                     else:
                         continue
@@ -105,45 +95,30 @@ class StreamsService(object):
             except ExpatError:
                 pass
 
-        return entries
 
-
-    def loadPlaylist(self):
-        iptv_type = dixie.GetSetting('playlist.type')
-        IPTV_URL  = '0'
-        IPTV_FILE = '1'
-
-        entries   = list()
-        label     = ''
-        value     = ''
-        
-        if iptv_type == IPTV_FILE:
-            path = os.path.join(dixie.GetSetting('playlist.file'))
-
-        else:
-            url  = dixie.GetSetting('playlist.url')
-            path = os.path.join(datapath, 'playlist.m3u')
-            try:
-                urllib.urlretrieve(url, path)
-            except: pass
-
-        if os.path.exists(path):
-            f = open(path)
-            playlist = f.readlines()
-            f.close()
-            
-            for line in playlist:
-                if line.startswith('#EXTINF:'):
-                    label = line.split(',')[-1].strip()
-        
-                elif line.startswith('rtmp') or line.startswith('rtmpe') or line.startswith('rtsp') or line.startswith('http'):
-                    value = line.replace('rtmp://$OPT:rtmp-raw=', '').replace('\n', '')
-        
-                    entries.append((label, value))
+    # def xbmc.PlayList.load(self, filename)
+    #     entries = list()
+    #     filename = os.path.join(datapath, extras, 'playlist.m3u')
+    #     if os.path.exists(filename):
+    #         f = open(filename)
+    #         m3u = f.read()
+    #         f.close()
 
         return entries
 
+    def getMashup(self):
+        return self.mashupParser.sections()
 
+    def getMashupStreams(self, provider):
+        return self.mashupParser.items(provider)
+
+    def getMashupIcon(self, provider):
+        streams = self.getMashupStreams(provider)
+        for (label, stream) in streams:
+            if label.upper() == 'ICON':
+                return stream
+        return ''
+        
     def getAddons(self):
         return self.addonsParser.sections()
 
@@ -156,21 +131,21 @@ class StreamsService(object):
         @type channel: source.Channel
         """
         favourites = self.loadFavourites()
-        playlist   = self.loadPlaylist()
-        
 
         # First check favourites, if we get exact match we use it
         for label, stream in favourites:
             if label == channel.title:
                 return stream
 
-        # Second check playlist, if we get exact match we use it
-        for label, stream in playlist:
-            if label == channel.title:
-                return stream
-        
-        # Third check all addons and return all matches
+        # Check all mashup and return all matches
         matches = list()
+        for provider in self.getMashup():
+            streams = self.getMashupStreams(provider)
+            for (label, stream) in streams:
+                if label == channel.title:
+                    matches.append((self.getMashupIcon(provider), label, stream))
+
+        # Second check all addons and return all matches
         for id in self.getAddons():
             try:
                 xbmcaddon.Addon(id)
@@ -178,23 +153,9 @@ class StreamsService(object):
                 continue # ignore addons that are not installed
 
             for (label, stream) in self.getAddonStreams(id):
-                label = label.upper()
-                channel.title = channel.title.upper()
-                
-                if (channel.title in label) or (label in channel.title):
+                if label == channel.title:
                     matches.append((id, label, stream))
-                    
-        # for id in self.loadFavourites():
-        #     id = 'plugin.video.ontapp-player'
-        #
-        #     for (label, stream) in self.loadFavourites():
-        #         label = label.upper()
-        #         channel.title = channel.title.upper()
-        #
-        #         if (channel.title in label) or (label in channel.title):
-        #             matches.append((id, label, stream))
-                
-            
+        
         if len(matches) == 1:
             return matches[0][2]
         else:
