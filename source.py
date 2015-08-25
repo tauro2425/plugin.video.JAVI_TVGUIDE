@@ -44,7 +44,7 @@ extras     = os.path.join(datapath, 'extras')
 logopath   = os.path.join(extras, 'logos')
 logos      = None
 
-if SOURCE == 'JAVI TVGUIDE':
+if SOURCE == 'ProyectoLuzDigital TV':
     logos = os.path.join(logopath, DIXIELOGOS)
 else:
     logos = XMLTVLOGOS
